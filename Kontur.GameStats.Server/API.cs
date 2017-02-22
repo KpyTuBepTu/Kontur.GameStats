@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -10,54 +9,14 @@ namespace Kontur.GameStats.Server
 {
     internal static class API
     {
-        //internal static Task PutUrlDefinition(string rawUrl, string data)
-        //{
-        //    var splitUrl = rawUrl.Split('/');
-        //    switch (splitUrl[1])
-        //    {
-        //        case "servers":
-        //            {
-        //                if (splitUrl.Length < 3)
-        //                    throw new Exception("Неизвестный PUT метод в /servers");
-
-        //                bool isIPv4 = Regex.IsMatch(splitUrl[2], @"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-[0-9]{1,5}\b");
-        //                bool isHostname = Regex.IsMatch(splitUrl[2], @"\b([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}-[0,9]{1,5}\b");
-        //                if (isIPv4 || isHostname)
-        //                {
-        //                    switch (splitUrl[3])
-        //                    {
-        //                        case "info":
-        //                            return Task.Run(() => PutServerInfo(data, splitUrl[2]));
-        //                        case "matches":
-        //                            {
-        //                                if (splitUrl.Length < 5)
-        //                                    throw new Exception("Не указан <timestamp>");
-        //                                if (splitUrl.Length >= 6)
-        //                                    throw new Exception("Неизвестный PUT метод в /servers/<endpoint>/matches/");
-
-        //                                bool isTimestamp = Regex.IsMatch(splitUrl[4], @"^\d\d\d\d-(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])(T|t)(00|[0-9]|1[0-9]|2[0-3]):([0-9]|[0-5][0-9]):([0-9]|[0-5][0-9])(Z|z)$");
-        //                                if (isTimestamp)
-        //                                    return Task.Run(() => PutMatchInfo(data, splitUrl[2], splitUrl[4]));
-        //                                else
-        //                                    throw new Exception("<timestamp> не соответствует шаблону");
-        //                            }
-        //                        default:
-        //                            throw new Exception("Неизвестный PUT метод в /servers/<endpoint>/");
-        //                    }
-        //                }
-        //                else
-        //                    throw new Exception("<endpoint> не соответствует шаблону");
-        //            }
-        //        default:
-        //            throw new Exception("Неизвестный PUT метод");
-        //    }
-        //}
-
-        internal static Task<string> UrlDefinition(string rawUrl, string data, string method)
+        internal static Task<KeyValuePair<bool, string>> UrlDefinition(string rawUrl, string data, string method)
         {
             var splitUrl = rawUrl.Split('/');
-            if (splitUrl.Length == 2)
-                throw new Exception("Похоже этот метод в другом замке");
+            if (splitUrl.Length <= 2)
+                return Task.Run(() =>
+                {
+                    return new KeyValuePair<bool, string>(false, "Very short URL: '" + rawUrl + "'");
+                });
 
             switch (splitUrl[1])
             {
@@ -68,128 +27,176 @@ namespace Kontur.GameStats.Server
                 case "players":
                     return PlayersBranch(splitUrl.Skip(2));
                 default:
-                    throw new Exception("Похоже этот метод в другом замке");
+                    return Task.Run(() =>
+                    {
+                        return new KeyValuePair<bool, string>(false, "Nonexistent first part of URL: '" + splitUrl[1] + "'");
+                    });
             }
         }
 
-        private static Task<string> PlayersBranch(IEnumerable<string> splitUrl)
+        private static Task<KeyValuePair<bool, string>> PlayersBranch(IEnumerable<string> splitUrl)
         {
             if (splitUrl.Count() != 2 && splitUrl.Last() != "stats")
-                throw new Exception("Похоже этот метод в другом замке");
+                return Task.Run(() => 
+                {
+                    return new KeyValuePair<bool, string>(false, "Something was wrong in '/players' query. Count after '/players': " + splitUrl.Count() + "  last part of URL: '" + splitUrl.Last() + "'");
+                });
 
             return Task.Run(() => GetPlayerStats(splitUrl.First()));
         }
 
-        private static Task<string> ReportBranch(IEnumerable<string> splitUrl)
+        private static Task<KeyValuePair<bool, string>> ReportBranch(IEnumerable<string> splitUrl)
         {
             var splitUrlCount = splitUrl.Count();
             if (splitUrlCount > 2)
-                throw new Exception("Похоже этот метод в другом замке");
+                return Task.Run(() =>
+                {
+                    return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/reports'");
+                });
 
             int recordCount = 5;
             switch (splitUrl.First())
             {
                 case "recent-matches":
-                    {
-                        if (splitUrlCount == 1)
-                            return Task.Run(() => GetRecentMatches(recordCount));
+                    if (splitUrlCount == 1)
+                        return Task.Run(() => GetRecentMatches(recordCount));
+                    else
+                        if (!int.TryParse(splitUrl.Last(), out recordCount))
+                            return Task.Run(() =>
+                            {
+                                return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/recent-matches'");
+                            });
                         else
-                        {
-                            if (!int.TryParse(splitUrl.Last(), out recordCount))
-                                throw new Exception("Похоже этот метод в другом замке");
-                            else
-                                return Task.Run(() => GetRecentMatches(recordCount));
-                        }
-                    }
+                            return Task.Run(() => GetRecentMatches(recordCount));
+
                 case "best-players":
-                    {
-                        if (splitUrlCount == 1)
-                            return Task.Run(() => GetRecentMatches(recordCount));
+                    if (splitUrlCount == 1)
+                        return Task.Run(() => GetBestPlayers(recordCount));
+                    else
+                        if (!int.TryParse(splitUrl.Last(), out recordCount))
+                            return Task.Run(() =>
+                            {
+                                return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/best-players'");
+                            });
                         else
-                        {
-                            if (!int.TryParse(splitUrl.Last(), out recordCount))
-                                throw new Exception("Похоже этот метод в другом замке");
-                            else
-                                return Task.Run(() => GetBestPlayers(recordCount));
-                        }
-                    }
+                            return Task.Run(() => GetBestPlayers(recordCount));
+
                 case "popular-servers":
-                    {
-                        if (splitUrlCount == 1)
-                            return Task.Run(() => GetRecentMatches(recordCount));
+                    if (splitUrlCount == 1)
+                        return Task.Run(() => GetPopularServers(recordCount));
+                    else
+                        if (!int.TryParse(splitUrl.Last(), out recordCount))
+                            return Task.Run(() =>
+                            {
+                                return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/popular-servers'");
+                            });
                         else
-                        {
-                            if (!int.TryParse(splitUrl.Last(), out recordCount))
-                                throw new Exception("Похоже этот метод в другом замке");
-                            else
-                                return Task.Run(() => GetPopularServers(recordCount));
-                        }
-                    }
+                            return Task.Run(() => GetPopularServers(recordCount));
                 default:
-                    throw new Exception("Похоже этот метод в другом замке");
+                    return Task.Run(() =>
+                    {
+                        return new KeyValuePair<bool, string>(false, "Nonexistent second part of '/reports': '" + splitUrl.First() + "'");
+                    });
             }
         }
 
-        private static Task<string> ServersBranchDefaultCase(IEnumerable<string> splitUrl, string data, string method)
+        private static Task<KeyValuePair<bool, string>> ServersBranchDefaultCase(IEnumerable<string> splitUrl, string data, string method)
         {
             switch (splitUrl.Skip(1).First())
             {
                 case "info":
-                    {
-                        if (splitUrl.Count() > 2)
-                            throw new Exception("Похоже этот метод в другом замке");
-                        else
-                            return method == "GET" ? Task.Run(() => GetServerInfo(splitUrl.First())) : Task.Run(() => PutServerInfo(data, splitUrl.First()));
-                    }
-                case "stats":
-                    {
-                        if (splitUrl.Count() > 2)
-                            throw new Exception("Похоже этот метод в другом замке");
-                        else
-                            return Task.Run(() => GetServerStats(splitUrl.First()));
-                    }
-                case "matches":
-                    {
-                        if (splitUrl.Count() > 3)
-                            throw new Exception("Похоже этот метод в другом замке");
-                        else
+                    if (splitUrl.Count() > 2)
+                        return Task.Run(() =>
                         {
-                            bool isTimestamp = Regex.IsMatch(splitUrl.Last(), @"^\d\d\d\d-(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])(T|t)(00|[0-9]|1[0-9]|2[0-3]):([0-9]|[0-5][0-9]):([0-9]|[0-5][0-9])(Z|z)$");
-                            if (isTimestamp)
-                                return method == "GET" ? Task.Run(() => GetMatchInfo(splitUrl.First(), splitUrl.Last())) : Task.Run(() => PutMatchInfo(data, splitUrl.First(), splitUrl.Last()));
-                            else
-                                throw new Exception("<timestamp> не соответствует шаблону");
-                        }
+                            return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/<endpoint>/info'");
+                        });
+                    else
+                        return method == "GET" ?
+                            Task.Run(() => GetServerInfo(splitUrl.First()))
+                            :
+                            Task.Run(() => PutServerInfo(data, splitUrl.First()));
+
+                case "stats":
+                    if (splitUrl.Count() > 2)
+                        return Task.Run(() =>
+                        {
+                            return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/<endpoint>/stats'");
+                        });
+                    else
+                        return Task.Run(() => GetServerStats(splitUrl.First()));
+
+                case "matches":
+                    if (splitUrl.Count() > 3)
+                        return Task.Run(() =>
+                        {
+                            return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/<endpoint>/matches/<timestamp>'");
+                        });
+                    else
+                    {
+                        bool isTimestamp = Regex.IsMatch(splitUrl.Last(), @"^\d\d\d\d-(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])(T|t)(00|[0-9]|1[0-9]|2[0-3]):([0-9]|[0-5][0-9]):([0-9]|[0-5][0-9])(Z|z)$");
+                        if (isTimestamp)
+                            return method == "GET" ?
+                                Task.Run(() => GetMatchInfo(splitUrl.First(), splitUrl.Last()))
+                                :
+                                Task.Run(() => PutMatchInfo(data, splitUrl.First(), splitUrl.Last()));
+                        else
+                            return Task.Run(() =>
+                            {
+                                return new KeyValuePair<bool, string>(false, "<timestamp>: '" + splitUrl.Last() + "' is not correct in '/servers/<endpoint>/matches'");
+                            });
                     }
+
                 default:
-                    throw new Exception("Похоже этот метод в другом замке");
+                    return Task.Run(() =>
+                    {
+                        return new KeyValuePair<bool, string>(false, "Nonexistent second part of '/servers': '" + splitUrl.Skip(1).First() + "'");
+                    });
             }
         }
 
-        private static Task<string> ServersBranch(IEnumerable<string> splitUrl, string data, string method)
+        private static Task<KeyValuePair<bool, string>> ServersBranch(IEnumerable<string> splitUrl, string data, string method)
         {
             switch (splitUrl.First())
             {
                 case "info":
-                    {
-                        if (splitUrl.Count() > 1)
-                            throw new Exception("Похоже этот метод в другом замке");
-
+                    if (splitUrl.Count() > 1)
+                        return Task.Run(() =>
+                        {
+                            return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/info'");
+                        });
+                    else
                         return Task.Run(() => GetAllServersInfo());
-                    }
+
                 default:
-                    {
-                        bool isIPv4 = Regex.IsMatch(splitUrl.First(), @"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-[0-9]{1,5}\b");
-                        bool isHostname = Regex.IsMatch(splitUrl.First(), @"\b([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}-[0,9]{1,5}\b");
-                        if (isIPv4 || isHostname)
-                            return ServersBranchDefaultCase(splitUrl, data, method);
-                        else
-                            throw new Exception("Похоже этот метод в другом замке");
-                    }
+                    bool isIPv4 = Regex.IsMatch(splitUrl.First(), @"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-[0-9]{1,5}\b");
+                    bool isHostname = Regex.IsMatch(splitUrl.First(), @"\b([a-zA-Z0-9]+(-[a-zA-Z0-9]+)*\.)+[a-zA-Z]{2,}-[0-9]{1,5}\b");
+                    if (isIPv4 || isHostname)
+                        return ServersBranchDefaultCase(splitUrl, data, method);
+                    else
+                        return Task.Run(() =>
+                        {
+                            return new KeyValuePair<bool, string>(false, "Second part of method '/servers': '" + splitUrl.First() + "' is not correct ipv4 or hostname");
+                        });
             }
         }
 
-        private static string GetAllServersInfo()
+        public static void CreateErrorLogRecord(string errorDescription, string url, string method)
+        {
+            using (var db = new DbModel("stats.db"))
+            {
+                Errors error = new Errors()
+                {
+                    Timestamp = DateTime.Now,
+                    ErrorMessage = errorDescription,
+                    Url = url,
+                    Method = method
+                };
+                db.Errors.Add(error);
+                db.SaveChangesAsync();
+            }
+        }
+
+        private static KeyValuePair<bool, string> GetAllServersInfo()
         {
             using (var db = new DbModel("stats.db"))
             {
@@ -207,19 +214,20 @@ namespace Kontur.GameStats.Server
                     })
                     .ToList();
 
-                return JsonConvert.SerializeObject(servers);
+                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(servers));
             }
         }
 
-        private static string GetMatchInfo(string endpoint, string timestamp)
+        private static KeyValuePair<bool, string> GetMatchInfo(string endpoint, string timestamp)
         {
             using (var db = new DbModel("stats.db"))
             {
+                var dt = DateTime.Parse(timestamp).ToUniversalTime();
                 var match = db.Matches
-                    .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp == DateTime.Parse(timestamp))
+                    .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp == dt)
                     .FirstOrDefault();
                 if (match == default(Matches))
-                    throw new Exception("Запрашиваемый матч не найден");
+                    return new KeyValuePair<bool, string>(false, "Match with endpoint = '" + endpoint + "' and timestamp = '" + timestamp + "' not found");
                 else
                 {
                     MatchInfo mi = new MatchInfo()
@@ -240,12 +248,12 @@ namespace Kontur.GameStats.Server
                             .ToList()
                     };
 
-                    return JsonConvert.SerializeObject(mi);
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(mi));
                 }
             }
         }
 
-        private static string GetServerInfo(string endpoint)
+        private static KeyValuePair<bool, string> GetServerInfo(string endpoint)
         {
             using (var db = new DbModel("stats.db"))
             {
@@ -253,7 +261,7 @@ namespace Kontur.GameStats.Server
                     .Where(serverCheck => serverCheck.Endpoint == endpoint)
                     .FirstOrDefault();
                 if (server == default(Servers))
-                    throw new Exception("Такого сервера нет в базе данных");
+                    return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
                 else
                 {
                     ServerInfo si = new ServerInfo()
@@ -262,12 +270,12 @@ namespace Kontur.GameStats.Server
                         gameModes = server.Modes.Select(mode => mode.Mode).ToList()
                     };
 
-                    return JsonConvert.SerializeObject(si);
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(si));
                 }
             }
         }
 
-        private static string PutServerInfo(string data, string endpoint)
+        private static KeyValuePair<bool, string> PutServerInfo(string data, string endpoint)
         {
             ServerInfo serverInfo = JsonConvert.DeserializeObject<ServerInfo>(data);
             using (var db = new DbModel("stats.db"))
@@ -314,10 +322,10 @@ namespace Kontur.GameStats.Server
                 db.SaveChangesAsync();
             }
 
-            return "";
+            return new KeyValuePair<bool, string>(true, "");
         }
 
-        private static string PutMatchInfo(string data, string endpoint, string timestamp)
+        private static KeyValuePair<bool, string> PutMatchInfo(string data, string endpoint, string timestamp)
         {
             MatchInfo matchInfo = JsonConvert.DeserializeObject<MatchInfo>(data);
             using (var db = new DbModel("stats.db"))
@@ -326,15 +334,14 @@ namespace Kontur.GameStats.Server
                     .Where(serverCheck => serverCheck.Endpoint == endpoint)
                     .FirstOrDefault();
                 if (server == default(Servers))
-                    throw new Exception("Сервера с таким <endpoint> нет в базе данных");
+                    return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
 
-                var gameMode = db.Servers
-                    .SelectMany(serverCheck => serverCheck.Modes)
-                    .Where(modeCheck => modeCheck.Mode == matchInfo.gameMode)
+                var gameMode = server.Modes
+                    .Where(mode => mode.Mode == matchInfo.gameMode)
                     .FirstOrDefault();
                 if (gameMode == default(GameModes))
-                    throw new Exception("На этом сервере нет такого игрового мода");
-
+                    return new KeyValuePair<bool, string>(false, "This game mode is not support on server");
+                
                 var match = db.Matches
                     .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp.ToString() == timestamp)
                     .FirstOrDefault();
@@ -347,11 +354,12 @@ namespace Kontur.GameStats.Server
                         FragLimit = matchInfo.fragLimit,
                         TimeLimit = matchInfo.timeLimit,
                         TimeElapsed = matchInfo.timeElapsed,
-                        Timestamp = DateTime.Parse(timestamp)
+                        Timestamp = DateTime.Parse(timestamp).ToUniversalTime()
                     };
                 else
-                    throw new Exception("Результаты этого матча уже присутствуют в базе");
+                    return new KeyValuePair<bool, string>(false, "Match with equal timestamp are exist on this server");
 
+                int playerPosition = 0;
                 foreach (ScoreboardInfo si in matchInfo.scoreboard)
                 {
                     var player = db.Players
@@ -360,13 +368,15 @@ namespace Kontur.GameStats.Server
                     if (player == default(Players))
                         player = new Players() { Name = si.name };
 
+                    playerPosition++;
                     Scoreboards score = new Scoreboards()
                     {
                         Match = match,
                         Player = player,
                         Frags = si.frags,
                         Kills = si.kills,
-                        Death = si.deaths
+                        Death = si.deaths,
+                        ScoreboardPercent = ((double)(matchInfo.scoreboard.Count - playerPosition) / (double)(matchInfo.scoreboard.Count - 1)) * 100.0
                     };
                     player.Scores.Add(score);
                     match.Scoreboard.Add(score);
@@ -379,16 +389,16 @@ namespace Kontur.GameStats.Server
                 db.SaveChangesAsync();
             }
 
-            return "";
+            return new KeyValuePair<bool, string>(true, "");
         }
 
-        private static string GetServerStats(string endpoint)
+        private static KeyValuePair<bool, string> GetServerStats(string endpoint)
         {
             using (var db = new DbModel("stats.db"))
             {
                 var server = db.Servers.Where(serverCheck => serverCheck.Endpoint == endpoint).FirstOrDefault();
                 if (server == default(Servers))
-                    throw new Exception("Данного сервера нет в базе данных");
+                    return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
                 else
                 {
                     var matchesCountGroupByDate = server.Matches
@@ -400,10 +410,10 @@ namespace Kontur.GameStats.Server
                     ServerStats ss = new ServerStats()
                     {
                         totalMatchesPlayed = server.Matches.Count,
-                        maximumMatchesPerDay = matchesCountGroupByDate.Max(),
-                        averageMatchesPerDay = matchesCountGroupByDate.Average(),
-                        maximumPopulation = playersCount.Max(),
-                        averagePopulation = playersCount.Average(),
+                        maximumMatchesPerDay = matchesCountGroupByDate.Count() == 0 ? 0 : matchesCountGroupByDate.Max(),
+                        averageMatchesPerDay = matchesCountGroupByDate.Count() == 0 ? 0 : matchesCountGroupByDate.Average(),
+                        maximumPopulation = playersCount.Count() == 0 ? 0 : playersCount.Max(),
+                        averagePopulation = playersCount.Count() == 0 ? 0 : playersCount.Average(),
                         top5GameModes = server.Matches
                             .Select(match => match.GameMode.Mode)
                             .GroupBy(mode => mode)
@@ -420,18 +430,18 @@ namespace Kontur.GameStats.Server
                             .ToList(),
                     };
 
-                    return JsonConvert.SerializeObject(ss);
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(ss));
                 }
             }
         }
 
-        private static string GetPlayerStats(string playerName)
+        private static KeyValuePair<bool, string> GetPlayerStats(string playerName)
         {
             using (var db = new DbModel("stats.db"))
             {
                 var player = db.Players.Where(playerCheck => playerCheck.Name.ToLower() == playerName.ToLower()).FirstOrDefault();
                 if (player == default(Players))
-                    throw new Exception("Данного игрока нет в базе данных");
+                    return new KeyValuePair<bool, string>(false, "Player name = '" + playerName + "' not found");
                 else
                 {
                     var uniqServers = player.Scores
@@ -443,10 +453,8 @@ namespace Kontur.GameStats.Server
                     PlayerStats ps = new PlayerStats()
                     {
                         totalMatchesPlayed = player.Scores.Count,
-                        totalMatchesWon = db.Scoreboards
-                            .GroupBy(score => score.Match)
-                            .Select(group => group.FirstOrDefault())
-                            .Where(score => score.Player.Name.ToLower() == playerName.ToLower())
+                        totalMatchesWon = player.Scores
+                            .Where(score => score.ScoreboardPercent == 100.0)
                             .Count(),
                         favouriteServer = uniqServers
                             .OrderByDescending(group => group.Count())
@@ -460,14 +468,7 @@ namespace Kontur.GameStats.Server
                             .Select(group => group.Key)
                             .FirstOrDefault(),
                         averageScoreboardPercent = player.Scores
-                            .Select(score =>
-                            {
-                                List<Scoreboards> scores = score.Match.Scoreboard.ToList();
-                                int playerBelow = 0;
-                                while (scores[scores.Count - playerBelow - 1].Player.Name != player.Name)
-                                    playerBelow++;
-                                return playerBelow / (scores.Count - 1) * 100;
-                            })
+                            .Select(score => score.ScoreboardPercent)
                             .Average(),
                         maximumMatchesPerDay = matchesPerDayGroup.Max(group => group.Count()),
                         averageMatchesPerDay = matchesPerDayGroup.Average(group => group.Count()),
@@ -475,25 +476,20 @@ namespace Kontur.GameStats.Server
                             .OrderByDescending(score => score.Match.Timestamp)
                             .Select(score => score.Match.Timestamp)
                             .FirstOrDefault(),
-                        killToDeathRatio = player.Scores
-                            .Select(score => score.Kills)
-                            .Sum() / player.Scores
-                            .Select(score => score.Death)
-                            .Sum()
+                        killToDeathRatio = (double)player.Scores.Sum(score => score.Kills) / (double)player.Scores.Sum(score => score.Death)
                     };
 
-                    return JsonConvert.SerializeObject(ps);
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(ps));
                 }
             }
         }
 
-        private static string GetRecentMatches(int count)
+        private static KeyValuePair<bool, string> GetRecentMatches(int count)
         {
             using (var db = new DbModel("stats.db"))
             {
                 if (count <= 0)
-                    return "[]";
-                //int count2 = count;
+                    return new KeyValuePair<bool, string>(true, "[]");
                 if (count > 50)
                     count = 50;
 
@@ -524,16 +520,16 @@ namespace Kontur.GameStats.Server
                     })
                     .ToList();
 
-                return JsonConvert.SerializeObject(recentMatches);
+                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(recentMatches));
             }
         }
 
-        private static string GetBestPlayers(int count)
+        private static KeyValuePair<bool, string> GetBestPlayers(int count)
         {
             using (var db = new DbModel("stats.db"))
             {
                 if (count <= 0)
-                    return "[]";
+                    return new KeyValuePair<bool, string>(true, "[]");
                 if (count > 50)
                     count = 50;
 
@@ -542,25 +538,21 @@ namespace Kontur.GameStats.Server
                     .Select(player => new BestPlayer()
                     {
                         name = player.Name,
-                        killToDeathRatio = player.Scores
-                            .Select(score => score.Kills)
-                            .Sum() / player.Scores
-                            .Select(score => score.Death)
-                            .Sum()
+                        killToDeathRatio = (double)player.Scores.Sum(score => score.Kills) / (double)player.Scores.Sum(score => score.Death)
                     })
                     .OrderByDescending(bp => bp.killToDeathRatio)
                     .Take(count);
 
-                return JsonConvert.SerializeObject(bestPlayers);
+                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(bestPlayers));
             }
         }
 
-        private static string GetPopularServers(int count)
+        private static KeyValuePair<bool, string> GetPopularServers(int count)
         {
             using (var db = new DbModel("stats.db"))
             {
                 if (count <= 0)
-                    return "[]";
+                    return new KeyValuePair<bool, string>(true, "[]");
                 if (count > 50)
                     count = 50;
 
@@ -570,14 +562,17 @@ namespace Kontur.GameStats.Server
                     {
                         endpoint = server.Endpoint,
                         name = server.Name,
-                        averageMatchesPerDay = server.Matches
+                        averageMatchesPerDay = server.Matches.Count == 0 ? 
+                            0 
+                            : 
+                            server.Matches
                             .Select(match => match.Timestamp)
                             .GroupBy(time => new DateTime(time.Year, time.Month, time.Day))
                             .Average(group => group.Count())
                     })
                     .OrderByDescending(server => server.averageMatchesPerDay)
                     .Take(count);
-                return JsonConvert.SerializeObject(popularServers);
+                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(popularServers));
             }
         }
     }

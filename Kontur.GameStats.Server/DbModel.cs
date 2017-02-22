@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Data.Entity;
 using SQLite.CodeFirst;
 using System.Data.SQLite;
@@ -36,6 +33,7 @@ namespace Kontur.GameStats.Server
         public virtual DbSet<Servers> Servers { get; set; }
         public virtual DbSet<GameModes> GameModes { get; set; }
         public virtual DbSet<Players> Players { get; set; }
+        public virtual DbSet<Errors> Errors { get; set; }
     }
 
     public class Servers
@@ -158,6 +156,10 @@ namespace Kontur.GameStats.Server
         [Column(TypeName = "int")]
         public int Death { get; set; }
 
+        [Required]
+        [Column(TypeName = "float")]
+        public double ScoreboardPercent { get; set; }
+
         [Timestamp]
         [Column(TypeName = "datetime")]
         private DateTime RecordTimeCreation { get; set; }
@@ -212,5 +214,37 @@ namespace Kontur.GameStats.Server
         private DateTime RecordTimeCreation { get; set; }
 
         public virtual ICollection<Scoreboards> Scores { get; set; }
+    }
+
+    public class Errors
+    {
+        public Errors()
+        {
+            RecordTimeCreation = DateTime.Now;
+        }
+
+        [Key]
+        public Int64 Id { get; set; }
+
+        [Required]
+        [Column(TypeName = "datetime")]
+        public DateTime Timestamp { get; set; }
+
+        [Required]
+        [Column(TypeName = "varchar")]
+        public string ErrorMessage { get; set; }
+
+        [Required]
+        [Column(TypeName = "varchar")]
+        public string Url { get; set; }
+
+        [Required]
+        [Column(TypeName = "varchar")]
+        [MaxLength(3)]
+        public string Method { get; set; }
+
+        [Timestamp]
+        [Column(TypeName = "datetime")]
+        private DateTime RecordTimeCreation { get; set; }
     }
 }
