@@ -3,7 +3,6 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace Kontur.GameStats.Server
 {
@@ -16,12 +15,6 @@ namespace Kontur.GameStats.Server
 
         public void Start(string prefix)
         {
-            //Console.WriteLine("Fist slow connect to db");
-            //using (var db = new DbModel("stats.db"))
-            //{
-            //    var initConnect = db.GameModes.Count();
-            //}
-            //Console.WriteLine("Ready");
             lock (listener)
             {
                 if (!isRunning)
@@ -90,7 +83,7 @@ namespace Kontur.GameStats.Server
                 catch (Exception error)
                 {
                     // TODO: log errors
-                    API.CreateErrorLogRecord(error.Message, "external error", "ext");
+                    API.CreateErrorLogRecord(dbName, error.Message, "external error", "ext");
                     Console.WriteLine("[" + DateTime.Now + "] " + error.Message);
                 }
             }
@@ -105,7 +98,7 @@ namespace Kontur.GameStats.Server
                 case "PUT":
                     // Key - true = success, false = error
                     // Value - if true = response, if false = error message
-                    var json = await API.UrlDefinition(listenerContext.Request.RawUrl, GetRequestData(listenerContext.Request), listenerContext.Request.HttpMethod);
+                    var json = await API.ParseUrl(dbName, listenerContext.Request.RawUrl, GetRequestData(listenerContext.Request), listenerContext.Request.HttpMethod);
                     if (json.Key)
                     {
                         listenerContext.Response.StatusCode = (int)HttpStatusCode.OK;
@@ -124,7 +117,7 @@ namespace Kontur.GameStats.Server
 
         private static void LoggingError(HttpListenerContext listenerContext, string errorDescription)
         {
-            API.CreateErrorLogRecord(errorDescription, listenerContext.Request.RawUrl, listenerContext.Request.HttpMethod);
+            API.CreateErrorLogRecord(dbName, errorDescription, listenerContext.Request.RawUrl, listenerContext.Request.HttpMethod);
             listenerContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
             using (var writer = new StreamWriter(listenerContext.Response.OutputStream))
                 writer.WriteLine();
@@ -150,5 +143,6 @@ namespace Kontur.GameStats.Server
         private Thread listenerThread;
         private bool disposed;
         private volatile bool isRunning;
+        private readonly static string dbName = "stats.db";
     }
 }

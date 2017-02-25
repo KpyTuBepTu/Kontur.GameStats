@@ -108,8 +108,8 @@ namespace Kontur.GameStats.Server
         public int FragLimit { get; set; }
 
         [Required]
-        [Column(TypeName = "float")]
-        public double TimeLimit { get; set; }
+        [Column(TypeName = "int")]
+        public int TimeLimit { get; set; }
 
         [Required]
         [Column(TypeName = "float")]

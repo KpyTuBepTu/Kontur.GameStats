@@ -7,9 +7,10 @@ using Newtonsoft.Json;
 
 namespace Kontur.GameStats.Server
 {
-    internal static class API
+    public static class API
     {
-        internal static Task<KeyValuePair<bool, string>> UrlDefinition(string rawUrl, string data, string method)
+        #region Parse Url
+        public static Task<KeyValuePair<bool, string>> ParseUrl(string dbName, string rawUrl, string data, string method)
         {
             var splitUrl = rawUrl.Split('/');
             if (splitUrl.Length <= 2)
@@ -21,11 +22,11 @@ namespace Kontur.GameStats.Server
             switch (splitUrl[1])
             {
                 case "servers":
-                    return ServersBranch(splitUrl.Skip(2), data, method);
+                    return ServersBranch(dbName, splitUrl.Skip(2), data, method);
                 case "reports":
-                    return ReportBranch(splitUrl.Skip(2));
+                    return ReportBranch(dbName, splitUrl.Skip(2));
                 case "players":
-                    return PlayersBranch(splitUrl.Skip(2));
+                    return PlayersBranch(dbName, splitUrl.Skip(2));
                 default:
                     return Task.Run(() =>
                     {
@@ -34,7 +35,7 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static Task<KeyValuePair<bool, string>> PlayersBranch(IEnumerable<string> splitUrl)
+        private static Task<KeyValuePair<bool, string>> PlayersBranch(string dbName, IEnumerable<string> splitUrl)
         {
             if (splitUrl.Count() != 2 && splitUrl.Last() != "stats")
                 return Task.Run(() => 
@@ -42,10 +43,10 @@ namespace Kontur.GameStats.Server
                     return new KeyValuePair<bool, string>(false, "Something was wrong in '/players' query. Count after '/players': " + splitUrl.Count() + "  last part of URL: '" + splitUrl.Last() + "'");
                 });
 
-            return Task.Run(() => GetPlayerStats(splitUrl.First()));
+            return Task.Run(() => GetPlayerStats(dbName, splitUrl.First()));
         }
 
-        private static Task<KeyValuePair<bool, string>> ReportBranch(IEnumerable<string> splitUrl)
+        private static Task<KeyValuePair<bool, string>> ReportBranch(string dbName, IEnumerable<string> splitUrl)
         {
             var splitUrlCount = splitUrl.Count();
             if (splitUrlCount > 2)
@@ -59,7 +60,7 @@ namespace Kontur.GameStats.Server
             {
                 case "recent-matches":
                     if (splitUrlCount == 1)
-                        return Task.Run(() => GetRecentMatches(recordCount));
+                        return Task.Run(() => GetRecentMatches(dbName, recordCount));
                     else
                         if (!int.TryParse(splitUrl.Last(), out recordCount))
                             return Task.Run(() =>
@@ -67,11 +68,11 @@ namespace Kontur.GameStats.Server
                                 return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/recent-matches'");
                             });
                         else
-                            return Task.Run(() => GetRecentMatches(recordCount));
+                            return Task.Run(() => GetRecentMatches(dbName, recordCount));
 
                 case "best-players":
                     if (splitUrlCount == 1)
-                        return Task.Run(() => GetBestPlayers(recordCount));
+                        return Task.Run(() => GetBestPlayers(dbName, recordCount));
                     else
                         if (!int.TryParse(splitUrl.Last(), out recordCount))
                             return Task.Run(() =>
@@ -79,11 +80,11 @@ namespace Kontur.GameStats.Server
                                 return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/best-players'");
                             });
                         else
-                            return Task.Run(() => GetBestPlayers(recordCount));
+                            return Task.Run(() => GetBestPlayers(dbName, recordCount));
 
                 case "popular-servers":
                     if (splitUrlCount == 1)
-                        return Task.Run(() => GetPopularServers(recordCount));
+                        return Task.Run(() => GetPopularServers(dbName, recordCount));
                     else
                         if (!int.TryParse(splitUrl.Last(), out recordCount))
                             return Task.Run(() =>
@@ -91,7 +92,7 @@ namespace Kontur.GameStats.Server
                                 return new KeyValuePair<bool, string>(false, "'/count' not a number in '/reports/popular-servers'");
                             });
                         else
-                            return Task.Run(() => GetPopularServers(recordCount));
+                            return Task.Run(() => GetPopularServers(dbName, recordCount));
                 default:
                     return Task.Run(() =>
                     {
@@ -100,7 +101,7 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static Task<KeyValuePair<bool, string>> ServersBranchDefaultCase(IEnumerable<string> splitUrl, string data, string method)
+        private static Task<KeyValuePair<bool, string>> ServersBranchDefaultCase(string dbName, IEnumerable<string> splitUrl, string data, string method)
         {
             switch (splitUrl.Skip(1).First())
             {
@@ -112,9 +113,9 @@ namespace Kontur.GameStats.Server
                         });
                     else
                         return method == "GET" ?
-                            Task.Run(() => GetServerInfo(splitUrl.First()))
+                            Task.Run(() => GetServerInfo(dbName, splitUrl.First()))
                             :
-                            Task.Run(() => PutServerInfo(data, splitUrl.First()));
+                            PutServerInfo(dbName, data, splitUrl.First());
 
                 case "stats":
                     if (splitUrl.Count() > 2)
@@ -123,7 +124,7 @@ namespace Kontur.GameStats.Server
                             return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/<endpoint>/stats'");
                         });
                     else
-                        return Task.Run(() => GetServerStats(splitUrl.First()));
+                        return Task.Run(() => GetServerStats(dbName, splitUrl.First()));
 
                 case "matches":
                     if (splitUrl.Count() > 3)
@@ -133,12 +134,12 @@ namespace Kontur.GameStats.Server
                         });
                     else
                     {
-                        bool isTimestamp = Regex.IsMatch(splitUrl.Last(), @"^\d\d\d\d-(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])(T|t)(00|[0-9]|1[0-9]|2[0-3]):([0-9]|[0-5][0-9]):([0-9]|[0-5][0-9])(Z|z)$");
+                        bool isTimestamp = Regex.IsMatch(splitUrl.Last(), @"^\d\d\d\d-(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])(T|t)(00|0[0-9]|1[0-9]|2[0-3]):([0-9]|[0-5][0-9]):([0-9]|[0-5][0-9])(Z|z)$");
                         if (isTimestamp)
                             return method == "GET" ?
-                                Task.Run(() => GetMatchInfo(splitUrl.First(), splitUrl.Last()))
+                                Task.Run(() => GetMatchInfo(dbName, splitUrl.First(), splitUrl.Last()))
                                 :
-                                Task.Run(() => PutMatchInfo(data, splitUrl.First(), splitUrl.Last()));
+                                PutMatchInfo(dbName, data, splitUrl.First(), splitUrl.Last());
                         else
                             return Task.Run(() =>
                             {
@@ -154,7 +155,7 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static Task<KeyValuePair<bool, string>> ServersBranch(IEnumerable<string> splitUrl, string data, string method)
+        private static Task<KeyValuePair<bool, string>> ServersBranch(string dbName, IEnumerable<string> splitUrl, string data, string method)
         {
             switch (splitUrl.First())
             {
@@ -165,125 +166,36 @@ namespace Kontur.GameStats.Server
                             return new KeyValuePair<bool, string>(false, "Unsupported length URL in '/servers/info'");
                         });
                     else
-                        return Task.Run(() => GetAllServersInfo());
+                        return Task.Run(() => GetAllServersInfo(dbName));
 
                 default:
-                    bool isIPv4 = Regex.IsMatch(splitUrl.First(), @"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-[0-9]{1,5}\b");
-                    bool isHostname = Regex.IsMatch(splitUrl.First(), @"\b([a-zA-Z0-9]+(-[a-zA-Z0-9]+)*\.)+[a-zA-Z]{2,}-[0-9]{1,5}\b");
-                    if (isIPv4 || isHostname)
-                        return ServersBranchDefaultCase(splitUrl, data, method);
+                    // без примеров хостнеймов нет смысла проверять корресктность ип
+                    //bool isIPv4 = Regex.IsMatch(splitUrl.First(), @"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}-[0-9]{1,5}\b");
+                    //bool isHostname = Regex.IsMatch(splitUrl.First(), @"\b*{1,}-[0-9]{1,5}\b");
+                    bool isRightPort = Regex.IsMatch(splitUrl.First(), @"\b*-[0-9]{1,5}\b");
+                    if (isRightPort)
+                        return ServersBranchDefaultCase(dbName, splitUrl, data, method);
                     else
                         return Task.Run(() =>
                         {
-                            return new KeyValuePair<bool, string>(false, "Second part of method '/servers': '" + splitUrl.First() + "' is not correct ipv4 or hostname");
+                            //return new KeyValuePair<bool, string>(false, "Second part of method '/servers': '" + splitUrl.First() + "' is not correct ipv4 or hostname");
+                            return new KeyValuePair<bool, string>(false, "'/servers': '" + splitUrl.First() + "' port missing or not correct");
                         });
             }
         }
+        #endregion
 
-        public static void CreateErrorLogRecord(string errorDescription, string url, string method)
-        {
-            using (var db = new DbModel("stats.db"))
-            {
-                Errors error = new Errors()
-                {
-                    Timestamp = DateTime.Now,
-                    ErrorMessage = errorDescription,
-                    Url = url,
-                    Method = method
-                };
-                db.Errors.Add(error);
-                db.SaveChangesAsync();
-            }
-        }
-
-        private static KeyValuePair<bool, string> GetAllServersInfo()
-        {
-            using (var db = new DbModel("stats.db"))
-            {
-                var servers = db.Servers
-                    .Select(server => new ServerFullInfo()
-                    {
-                        endpoint = server.Endpoint,
-                        info = new ServerInfo()
-                        {
-                            name = server.Name,
-                            gameModes = server.Modes
-                                    .Select(mode => mode.Mode)
-                                    .ToList()
-                        }
-                    })
-                    .ToList();
-
-                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(servers));
-            }
-        }
-
-        private static KeyValuePair<bool, string> GetMatchInfo(string endpoint, string timestamp)
-        {
-            using (var db = new DbModel("stats.db"))
-            {
-                var dt = DateTime.Parse(timestamp).ToUniversalTime();
-                var match = db.Matches
-                    .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp == dt)
-                    .FirstOrDefault();
-                if (match == default(Matches))
-                    return new KeyValuePair<bool, string>(false, "Match with endpoint = '" + endpoint + "' and timestamp = '" + timestamp + "' not found");
-                else
-                {
-                    MatchInfo mi = new MatchInfo()
-                    {
-                        map = match.Map,
-                        gameMode = match.GameMode.Mode,
-                        fragLimit = match.FragLimit,
-                        timeLimit = match.TimeLimit,
-                        timeElapsed = match.TimeElapsed,
-                        scoreboard = match.Scoreboard
-                            .Select(score => new ScoreboardInfo()
-                            {
-                                name = score.Player.Name,
-                                frags = score.Frags,
-                                kills = score.Kills,
-                                deaths = score.Death
-                            })
-                            .ToList()
-                    };
-
-                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(mi));
-                }
-            }
-        }
-
-        private static KeyValuePair<bool, string> GetServerInfo(string endpoint)
-        {
-            using (var db = new DbModel("stats.db"))
-            {
-                var server = db.Servers
-                    .Where(serverCheck => serverCheck.Endpoint == endpoint)
-                    .FirstOrDefault();
-                if (server == default(Servers))
-                    return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
-                else
-                {
-                    ServerInfo si = new ServerInfo()
-                    {
-                        name = server.Name,
-                        gameModes = server.Modes.Select(mode => mode.Mode).ToList()
-                    };
-
-                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(si));
-                }
-            }
-        }
-
-        private static KeyValuePair<bool, string> PutServerInfo(string data, string endpoint)
+        #region PUT methods
+        private static async Task<KeyValuePair<bool, string>> PutServerInfo(string dbName, string data, string endpoint)
         {
             ServerInfo serverInfo = JsonConvert.DeserializeObject<ServerInfo>(data);
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
                 bool isServerExist = false;
                 var server = db.Servers
                     .Where(serverCheck => serverCheck.Endpoint == endpoint)
                     .FirstOrDefault();
+
                 if (server == default(Servers))
                     server = new Servers()
                     {
@@ -319,32 +231,35 @@ namespace Kontur.GameStats.Server
 
                 if (!isServerExist)
                     db.Servers.Add(server);
-                db.SaveChangesAsync();
+                await db.SaveChangesAsync();
             }
 
             return new KeyValuePair<bool, string>(true, "");
         }
 
-        private static KeyValuePair<bool, string> PutMatchInfo(string data, string endpoint, string timestamp)
+        private static async Task<KeyValuePair<bool, string>> PutMatchInfo(string dbName, string data, string endpoint, string timestamp)
         {
             MatchInfo matchInfo = JsonConvert.DeserializeObject<MatchInfo>(data);
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
                 var server = db.Servers
                     .Where(serverCheck => serverCheck.Endpoint == endpoint)
                     .FirstOrDefault();
+
                 if (server == default(Servers))
                     return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
 
                 var gameMode = server.Modes
                     .Where(mode => mode.Mode == matchInfo.gameMode)
                     .FirstOrDefault();
+
                 if (gameMode == default(GameModes))
-                    return new KeyValuePair<bool, string>(false, "This game mode is not support on server");
-                
+                    return new KeyValuePair<bool, string>(false, "This game mode [" + matchInfo.gameMode + "] is not support on server [" + server.Name + "]");
+
                 var match = db.Matches
                     .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp.ToString() == timestamp)
                     .FirstOrDefault();
+
                 if (match == default(Matches))
                     match = new Matches()
                     {
@@ -365,6 +280,7 @@ namespace Kontur.GameStats.Server
                     var player = db.Players
                         .Where(playerCheck => playerCheck.Name.ToLower() == si.name.ToLower())
                         .FirstOrDefault();
+
                     if (player == default(Players))
                         player = new Players() { Name = si.name };
 
@@ -386,17 +302,103 @@ namespace Kontur.GameStats.Server
                 server.Matches.Add(match);
                 gameMode.Matches.Add(match);
                 db.Matches.Add(match);
-                db.SaveChangesAsync();
+                await db.SaveChangesAsync();
             }
 
             return new KeyValuePair<bool, string>(true, "");
         }
+        #endregion
 
-        private static KeyValuePair<bool, string> GetServerStats(string endpoint)
+        #region GET methods
+        private static KeyValuePair<bool, string> GetAllServersInfo(string dbName)
         {
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
-                var server = db.Servers.Where(serverCheck => serverCheck.Endpoint == endpoint).FirstOrDefault();
+                var servers = db.Servers
+                    .Select(server => new ServerFullInfo()
+                    {
+                        endpoint = server.Endpoint,
+                        info = new ServerInfo()
+                        {
+                            name = server.Name,
+                            gameModes = server.Modes
+                                .Select(mode => mode.Mode)
+                                .ToList()
+                        }
+                    })
+                    .ToList();
+
+                return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(servers));
+            }
+        }
+
+        private static KeyValuePair<bool, string> GetMatchInfo(string dbName, string endpoint, string timestamp)
+        {
+            using (var db = new DbModel(dbName))
+            {
+                var dt = DateTime.Parse(timestamp).ToUniversalTime();
+                var match = db.Matches
+                    .Where(matchCheck => matchCheck.Server.Endpoint == endpoint && matchCheck.Timestamp == dt)
+                    .FirstOrDefault();
+
+                if (match == default(Matches))
+                    return new KeyValuePair<bool, string>(false, "Match with endpoint = '" + endpoint + "' and timestamp = '" + timestamp + "' not found");
+                else
+                {
+                    MatchInfo mi = new MatchInfo()
+                    {
+                        map = match.Map,
+                        gameMode = match.GameMode.Mode,
+                        fragLimit = match.FragLimit,
+                        timeLimit = match.TimeLimit,
+                        timeElapsed = match.TimeElapsed,
+                        scoreboard = match.Scoreboard
+                            .Select(score => new ScoreboardInfo()
+                            {
+                                name = score.Player.Name,
+                                frags = score.Frags,
+                                kills = score.Kills,
+                                deaths = score.Death
+                            })
+                            .ToList()
+                    };
+
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(mi));
+                }
+            }
+        }
+
+        private static KeyValuePair<bool, string> GetServerInfo(string dbName, string endpoint)
+        {
+            using (var db = new DbModel(dbName))
+            {
+                var server = db.Servers
+                    .Where(serverCheck => serverCheck.Endpoint == endpoint)
+                    .FirstOrDefault();
+
+                if (server == default(Servers))
+                    return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
+                else
+                {
+                    ServerInfo si = new ServerInfo()
+                    {
+                        name = server.Name,
+                        gameModes = server.Modes.Select(mode => mode.Mode).ToList()
+                    };
+
+                    return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(si));
+                }
+            }
+        }
+
+        private static KeyValuePair<bool, string> GetServerStats(string dbName, string endpoint)
+        {
+            using (var db = new DbModel(dbName))
+            {
+                var server = db.Servers
+                    .Where(serverCheck => serverCheck.Endpoint == endpoint)
+                    .FirstOrDefault();
+
                 if (server == default(Servers))
                     return new KeyValuePair<bool, string>(false, "Server with enpoint = '" + endpoint + "' not found");
                 else
@@ -404,6 +406,7 @@ namespace Kontur.GameStats.Server
                     var matchesCountGroupByDate = server.Matches
                         .GroupBy(match => new DateTime(match.Timestamp.Year, match.Timestamp.Month, match.Timestamp.Day))
                         .Select(group => group.Count());
+
                     var playersCount = server.Matches
                         .Select(match => match.Scoreboard.Count);
 
@@ -414,20 +417,8 @@ namespace Kontur.GameStats.Server
                         averageMatchesPerDay = matchesCountGroupByDate.Count() == 0 ? 0 : matchesCountGroupByDate.Average(),
                         maximumPopulation = playersCount.Count() == 0 ? 0 : playersCount.Max(),
                         averagePopulation = playersCount.Count() == 0 ? 0 : playersCount.Average(),
-                        top5GameModes = server.Matches
-                            .Select(match => match.GameMode.Mode)
-                            .GroupBy(mode => mode)
-                            .OrderByDescending(group => group.Count())
-                            .Select(group => group.Key)
-                            .Take(5)
-                            .ToList(),
-                        top5Maps = server.Matches
-                            .Select(match => match.Map)
-                            .GroupBy(map => map)
-                            .OrderByDescending(group => group.Count())
-                            .Select(group => group.Key)
-                            .Take(5)
-                            .ToList(),
+                        top5GameModes = GetTop5GameModes(server),
+                        top5Maps = GetTop5Maps(server),
                     };
 
                     return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(ss));
@@ -435,11 +426,14 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static KeyValuePair<bool, string> GetPlayerStats(string playerName)
+        private static KeyValuePair<bool, string> GetPlayerStats(string dbName, string playerName)
         {
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
-                var player = db.Players.Where(playerCheck => playerCheck.Name.ToLower() == playerName.ToLower()).FirstOrDefault();
+                var player = db.Players
+                    .Where(playerCheck => playerCheck.Name.ToLower() == playerName.ToLower())
+                    .FirstOrDefault();
+
                 if (player == default(Players))
                     return new KeyValuePair<bool, string>(false, "Player name = '" + playerName + "' not found");
                 else
@@ -447,9 +441,11 @@ namespace Kontur.GameStats.Server
                     var uniqServers = player.Scores
                         .Select(score => score.Match.Server.Endpoint)
                         .GroupBy(endpoint => endpoint);
+
                     var matchesPerDayGroup = player.Scores
                             .Select(score => score.Match.Timestamp)
                             .GroupBy(time => new DateTime(time.Year, time.Month, time.Day));
+
                     PlayerStats ps = new PlayerStats()
                     {
                         totalMatchesPlayed = player.Scores.Count,
@@ -461,22 +457,12 @@ namespace Kontur.GameStats.Server
                             .Select(group => group.Key)
                             .FirstOrDefault(),
                         uniqueServers = uniqServers.Count(),
-                        favouriteMode = player.Scores
-                            .Select(score => score.Match.GameMode.Mode)
-                            .GroupBy(mode => mode)
-                            .OrderByDescending(group => group.Count())
-                            .Select(group => group.Key)
-                            .FirstOrDefault(),
-                        averageScoreboardPercent = player.Scores
-                            .Select(score => score.ScoreboardPercent)
-                            .Average(),
+                        favouriteMode = FindFavouriteMode(player),
+                        averageScoreboardPercent = CalcAverageScoreboardPercent(player),
                         maximumMatchesPerDay = matchesPerDayGroup.Max(group => group.Count()),
                         averageMatchesPerDay = matchesPerDayGroup.Average(group => group.Count()),
-                        lastMatchPlayed = player.Scores
-                            .OrderByDescending(score => score.Match.Timestamp)
-                            .Select(score => score.Match.Timestamp)
-                            .FirstOrDefault(),
-                        killToDeathRatio = (double)player.Scores.Sum(score => score.Kills) / (double)player.Scores.Sum(score => score.Death)
+                        lastMatchPlayed = FindLastMatchPlayed(player),
+                        killToDeathRatio = CalcKDRatio(player)
                     };
 
                     return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(ps));
@@ -484,9 +470,9 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static KeyValuePair<bool, string> GetRecentMatches(int count)
+        private static KeyValuePair<bool, string> GetRecentMatches(string dbName, int count)
         {
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
                 if (count <= 0)
                     return new KeyValuePair<bool, string>(true, "[]");
@@ -524,21 +510,24 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static KeyValuePair<bool, string> GetBestPlayers(int count)
+        private static KeyValuePair<bool, string> GetBestPlayers(string dbName, int count)
         {
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
                 if (count <= 0)
                     return new KeyValuePair<bool, string>(true, "[]");
                 if (count > 50)
                     count = 50;
 
-                var validPlayers = db.Players.Where(player => player.Scores.Count > 9 && player.Scores.Select(score => score.Death).Sum() != 0);
+                var validPlayers = db.Players
+                    .Where(player => player.Scores.Count > 9 && player.Scores.Select(score => score.Death).Sum() != 0)
+                    .ToList();
+
                 var bestPlayers = validPlayers
                     .Select(player => new BestPlayer()
                     {
                         name = player.Name,
-                        killToDeathRatio = (double)player.Scores.Sum(score => score.Kills) / (double)player.Scores.Sum(score => score.Death)
+                        killToDeathRatio = CalcKDRatio(player)
                     })
                     .OrderByDescending(bp => bp.killToDeathRatio)
                     .Take(count);
@@ -547,9 +536,9 @@ namespace Kontur.GameStats.Server
             }
         }
 
-        private static KeyValuePair<bool, string> GetPopularServers(int count)
+        private static KeyValuePair<bool, string> GetPopularServers(string dbName, int count)
         {
-            using (var db = new DbModel("stats.db"))
+            using (var db = new DbModel(dbName))
             {
                 if (count <= 0)
                     return new KeyValuePair<bool, string>(true, "[]");
@@ -562,35 +551,117 @@ namespace Kontur.GameStats.Server
                     {
                         endpoint = server.Endpoint,
                         name = server.Name,
-                        averageMatchesPerDay = server.Matches.Count == 0 ? 
-                            0 
-                            : 
-                            server.Matches
-                            .Select(match => match.Timestamp)
-                            .GroupBy(time => new DateTime(time.Year, time.Month, time.Day))
-                            .Average(group => group.Count())
+                        averageMatchesPerDay = CalcAverageMatchesPerDay(server)
                     })
                     .OrderByDescending(server => server.averageMatchesPerDay)
                     .Take(count);
                 return new KeyValuePair<bool, string>(true, JsonConvert.SerializeObject(popularServers));
             }
         }
+        #endregion
+
+        public static async void CreateErrorLogRecord(string dbName, string errorDescription, string url, string method)
+        {
+            using (var db = new DbModel(dbName))
+            {
+                Errors error = new Errors()
+                {
+                    Timestamp = DateTime.Now,
+                    ErrorMessage = errorDescription,
+                    Url = url,
+                    Method = method
+                };
+                db.Errors.Add(error);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        public static double CalcKDRatio(Players player)
+        {
+            int totalPlayerDeath = player.Scores.Sum(score => score.Death);
+            return totalPlayerDeath == 0 ? 0 : (double)player.Scores.Sum(score => score.Kills) / (double)totalPlayerDeath;
+        }
+
+        public static double CalcAverageMatchesPerDay(Servers server)
+        {
+            return server.Matches.Count == 0 ? 0 : server.Matches
+                                                            .Select(match => match.Timestamp)
+                                                            .GroupBy(time => new DateTime(time.Year, time.Month, time.Day))
+                                                            .Average(group => group.Count());
+        }
+
+        public static DateTime FindLastMatchPlayed(Players player)
+        {
+            return player.Scores
+                .Select(score => score.Match.Timestamp)
+                .OrderByDescending(timestamp => timestamp)
+                .FirstOrDefault();
+        }
+
+        public static double CalcAverageScoreboardPercent(Players player)
+        {
+            return player.Scores
+                .Average(score => score.ScoreboardPercent);
+        }
+
+        public static string FindFavouriteMode(Players player)
+        {
+            return player.Scores
+                .Select(score => score.Match.GameMode.Mode)
+                .GroupBy(mode => mode)
+                .OrderByDescending(group => group.Count())
+                .Select(group => group.Key)
+                .FirstOrDefault();
+        }
+
+        public static string FindFavouriteServer(Players player)
+        {
+            return player.Scores
+                .Select(score => score.Match.Server.Name)
+                .GroupBy(name => name)
+                .OrderByDescending(group => group.Count())
+                .Select(group => group.Key)
+                .FirstOrDefault();
+        }
+
+        public static List<string> GetTop5GameModes(Servers server)
+        {
+            return server.Matches
+                .Select(match => match.GameMode.Mode)
+                .GroupBy(mode => mode)
+                .OrderByDescending(group => group.Count())
+                .Select(group => group.Key)
+                .Take(5)
+                .ToList();
+        }
+
+        public static List<string> GetTop5Maps(Servers server)
+        {
+            return server.Matches
+                .Select(match => match.Map)
+                .GroupBy(map => map)
+                .OrderByDescending(group => group.Count())
+                .Select(group => group.Key)
+                .Take(5)
+                .ToList();
+        }
     }
 
-    internal class PopularServer
+    #region Json classes
+    public class PopularServer
     {
         public string endpoint { get; set; }
         public string name { get; set; }
         public double averageMatchesPerDay { get; set; }
     }
 
-    internal class BestPlayer
+    public class BestPlayer
     {
         public string name { get; set; }
         public double killToDeathRatio { get; set; }
     }
 
-    internal class PlayerStats
+    public class PlayerStats
     {
         public int totalMatchesPlayed { get; set; }
         public int totalMatchesWon { get; set; }
@@ -604,7 +675,7 @@ namespace Kontur.GameStats.Server
         public double killToDeathRatio { get; set; }
     }
 
-    internal class ServerStats
+    public class ServerStats
     {
         public int totalMatchesPlayed { get; set; }
         public int maximumMatchesPerDay { get; set; }
@@ -615,40 +686,41 @@ namespace Kontur.GameStats.Server
         public List<string> top5Maps { get; set; }
     }
 
-    internal class ServerInfo
+    public class ServerInfo
     {
         public string name { get; set; }
         public List<string> gameModes { get; set; }
     }
 
-    internal class ServerFullInfo
+    public class ServerFullInfo
     {
         public string endpoint { get; set; }
         public ServerInfo info { get; set; }
     }
 
-    internal class MatchInfo
+    public class MatchInfo
     {
         public string map { get; set; }
         public string gameMode { get; set; }
         public int fragLimit { get; set; }
-        public double timeLimit { get; set; }
+        public int timeLimit { get; set; }
         public double timeElapsed { get; set; }
         public List<ScoreboardInfo> scoreboard { get; set; }
     }
 
-    internal class MatchFullInfo
+    public class MatchFullInfo
     {
         public string server { get; set; }
         public DateTime timestamp { get; set; }
         public MatchInfo results { get; set; }
     }
 
-    internal class ScoreboardInfo
+    public class ScoreboardInfo
     {
         public string name { get; set; }
         public int frags { get; set; }
         public int kills { get; set; }
         public int deaths { get; set; }
     }
+    #endregion
 }
